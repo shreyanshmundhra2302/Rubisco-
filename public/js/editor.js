@@ -127,7 +127,17 @@ const RubiscoEditor = (() => {
     const page = document.getElementById("notes-page");
     page.innerHTML = "";
     currentProject.document.blocks.forEach(block => {
-      const node = RubiscoBlocks.render(block);
+      let node;
+      try {
+        node = RubiscoBlocks.render(block);
+      } catch (err) {
+        console.error("Failed to render block, showing placeholder instead:", block, err);
+        node = document.createElement("div");
+        node.className = "block b-error";
+        node.dataset.blockId = block.id || "";
+        node.dataset.blockType = block.type || "unknown";
+        node.textContent = `⚠️ This block (${block.type || "unknown type"}) could not be rendered and was skipped.`;
+      }
       if (block.id === selectedBlockId) node.classList.add("selected");
       page.appendChild(node);
     });
