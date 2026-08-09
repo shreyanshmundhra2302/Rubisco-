@@ -9,6 +9,9 @@ const { GENERATION_MODES } = require("../schemas/blockSchema");
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 40 * 1024 * 1024 } });
 
+// ---------------------------------------------------------
+// POST /api/extract/pdf — upload a PDF, get per-page text + needsOCR flags
+// ---------------------------------------------------------
 router.post("/extract/pdf", upload.single("file"), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: "No file uploaded." });
@@ -20,6 +23,10 @@ router.post("/extract/pdf", upload.single("file"), async (req, res) => {
   }
 });
 
+// ---------------------------------------------------------
+// POST /api/generate — generate a full structured document
+// body: { pages: [{pageNumber, text}], mode, referenceBook, includeSourceRefs, provider }
+// ---------------------------------------------------------
 router.post("/generate", async (req, res) => {
   try {
     const { pages, mode = "smart", referenceBook, includeSourceRefs, provider } = req.body;
@@ -31,7 +38,7 @@ router.post("/generate", async (req, res) => {
       return res.status(400).json({ error: `Invalid mode "${mode}".` });
     }
 
-    const { document, qcErrors } = await generateDocument({
+    const { document, qcErrors, chunkErrors, partial } = await generateDocument({
       pages,
       mode,
       referenceBook,
@@ -39,13 +46,24 @@ router.post("/generate", async (req, res) => {
       providerOverride: provider
     });
 
-    res.json({ document, qcErrors });
+    if (partial) {
+      console.warn(
+        `Generation partially failed: ${chunkErrors.length} chunk(s) could not be parsed and were skipped.`,
+        chunkErrors
+      );
+    }
+
+    res.json({ document, qcErrors, chunkErrors, partial });
   } catch (err) {
     console.error("Generation error:", err);
     res.status(500).json({ error: err.message || "Generation failed." });
   }
 });
 
+// ---------------------------------------------------------
+// POST /api/transform — transform a single selected block
+// body: { block, operation, context, provider }
+// ---------------------------------------------------------
 router.post("/transform", async (req, res) => {
   try {
     const { block, operation, context, provider } = req.body;
@@ -60,6 +78,9 @@ router.post("/transform", async (req, res) => {
   }
 });
 
+// ---------------------------------------------------------
+// GET /api/health — simple healthcheck + provider info (no secrets)
+// ---------------------------------------------------------
 router.get("/health", (req, res) => {
   res.json({
     ok: true,
