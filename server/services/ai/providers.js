@@ -42,6 +42,71 @@ async function callOpenAI({ systemPrompt, userContent }) {
   return data.choices?.[0]?.message?.content || "";
 }
 
+// Best-effort structured-output schema for the Gemini "responseSchema" field.
+// Deliberately permissive on block-specific fields (rather than a strict
+// oneOf/discriminated union) because:
+//  (a) the Gemini API's supported OpenAPI-schema subset does not reliably
+//      support oneOf/anyOf across versions, and
+//  (b) over-constraining the schema risks the model dropping content to
+//      satisfy it, which would silently reduce note completeness.
+// It still forces the model into a JSON object with the right top-level
+// envelope and an array of typed block objects, which is what actually
+// causes stray prose / code fences / multiple objects in the response.
+const GEMINI_BLOCK_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    type: { type: "STRING" },
+    content: { type: "STRING" },
+    title: { type: "STRING" },
+    tag: { type: "STRING" },
+    explanation: { type: "STRING" },
+    question: { type: "STRING" },
+    answer: { type: "STRING" },
+    front: { type: "STRING" },
+    back: { type: "STRING" },
+    description: { type: "STRING" },
+    orientation: { type: "STRING" },
+    items: { type: "ARRAY", items: { type: "STRING" } },
+    options: { type: "ARRAY", items: { type: "STRING" } },
+    correctIndex: { type: "INTEGER" },
+    caption: { type: "STRING" },
+    headers: { type: "ARRAY", items: { type: "STRING" } },
+    rows: { type: "ARRAY", items: { type: "ARRAY", items: { type: "STRING" } } },
+    nodes: {
+      type: "ARRAY",
+      items: {
+        type: "OBJECT",
+        properties: { id: { type: "STRING" }, label: { type: "STRING" } }
+      }
+    },
+    connections: {
+      type: "ARRAY",
+      items: {
+        type: "OBJECT",
+        properties: { from: { type: "STRING" }, to: { type: "STRING" }, label: { type: "STRING" } }
+      }
+    },
+    tree: {
+      type: "ARRAY",
+      items: {
+        type: "OBJECT",
+        properties: { label: { type: "STRING" }, children: { type: "ARRAY", items: { type: "OBJECT" } } }
+      }
+    }
+  },
+  required: ["type"]
+};
+
+const GEMINI_DOCUMENT_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    title: { type: "STRING" },
+    importantTopics: { type: "ARRAY", items: { type: "STRING" } },
+    blocks: { type: "ARRAY", items: GEMINI_BLOCK_SCHEMA }
+  },
+  required: ["blocks"]
+};
+
 async function callGemini({ systemPrompt, userContent }) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("GEMINI_API_KEY is not configured on the server.");
@@ -49,27 +114,54 @@ async function callGemini({ systemPrompt, userContent }) {
 
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      system_instruction: { parts: [{ text: systemPrompt }] },
-      contents: [{ role: "user", parts: [{ text: userContent }] }],
-      generationConfig: {
-        temperature: TEMPERATURE,
-        maxOutputTokens: MAX_TOKENS,
-        responseMimeType: "application/json"
-      }
-    })
+  const strictJsonPrefix =
+    "CRITICAL OUTPUT RULE: Respond with ONLY the raw JSON object requested below. " +
+    "Do not include Markdown code fences (no ``` of any kind), no preamble, no explanation, " +
+    "no comments, and no text of any kind before or after the JSON. The response body must " +
+    "start with '{' and end with '}' and contain nothing else.\n\n";
+
+  const buildBody = (useSchema) => ({
+    system_instruction: { parts: [{ text: strictJsonPrefix + systemPrompt }] },
+    contents: [{ role: "user", parts: [{ text: userContent }] }],
+    generationConfig: {
+      temperature: TEMPERATURE,
+      maxOutputTokens: MAX_TOKENS,
+      responseMimeType: "application/json",
+      ...(useSchema ? { responseSchema: GEMINI_DOCUMENT_SCHEMA } : {})
+    }
   });
 
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Gemini API error (${res.status}): ${text}`);
+  const doCall = async (useSchema) => {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(buildBody(useSchema))
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      const err = new Error(`Gemini API error (${res.status}): ${text}`);
+      err.status = res.status;
+      err.body = text;
+      throw err;
+    }
+    const data = await res.json();
+    const parts = data.candidates?.[0]?.content?.parts || [];
+    return parts.map(p => p.text || "").join("");
+  };
+
+  try {
+    return await doCall(true);
+  } catch (err) {
+    // If the schema itself was rejected as invalid (e.g. an unsupported
+    // keyword on the currently deployed model version), fall back to plain
+    // responseMimeType:"application/json" mode rather than failing the
+    // whole request — the strict prompt + JSON mime type still do most of
+    // the work, and generate.js's parser/retry handle the rest.
+    const looksLikeSchemaRejection =
+      err.status === 400 && /schema/i.test(err.body || "");
+    if (!looksLikeSchemaRejection) throw err;
+    return doCall(false);
   }
-  const data = await res.json();
-  const parts = data.candidates?.[0]?.content?.parts || [];
-  return parts.map(p => p.text || "").join("");
 }
 
 async function callClaude({ systemPrompt, userContent }) {
