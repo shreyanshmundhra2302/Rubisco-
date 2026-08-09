@@ -13,7 +13,7 @@ const pdfjsLib = require("pdfjs-dist/legacy/build/pdf.js");
 const MIN_CHARS_FOR_TEXT_PAGE = 20;
 
 async function extractPdfPages(buffer) {
-  const loadingTask = pdfjsLib.getDocument({ data: buffer });
+  const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(buffer) });
   const pdf = await loadingTask.promise;
   const pages = [];
 
