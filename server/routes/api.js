@@ -1,63 +1,71 @@
-/**
- * RUBISCO — API CLIENT
- * ----------------------------------
- * Talks to the backend ONLY for:
- *   - PDF text extraction
- *   - AI generation
- *   - AI transform
- * Never used to store/retrieve personal projects — that's IndexedDB's job.
- */
+const express = require("express");
+const multer = require("multer");
+const router = express.Router();
 
-const RubiscoAPI = {
-  isOnline() {
-    return navigator.onLine;
-  },
+const { extractPdfPages } = require("../services/pdf/extract");
+const { generateDocument } = require("../services/ai/generate");
+const { transformBlock } = require("../services/ai/transform");
+const { GENERATION_MODES } = require("../schemas/blockSchema");
 
-  async health() {
-    const res = await fetch("/api/health");
-    if (!res.ok) throw new Error("Server unreachable.");
-    return res.json();
-  },
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 40 * 1024 * 1024 } });
 
-  async extractPdf(file) {
-    if (!this.isOnline()) throw new Error("OFFLINE");
-    const form = new FormData();
-    form.append("file", file);
-    const res = await fetch("/api/extract/pdf", { method: "POST", body: form });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || "PDF extraction failed.");
-    }
-    return res.json();
-  },
-
-  async generate({ pages, mode, referenceBook, includeSourceRefs, provider }) {
-    if (!this.isOnline()) throw new Error("OFFLINE");
-    const res = await fetch("/api/generate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ pages, mode, referenceBook, includeSourceRefs, provider })
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || "Generation failed.");
-    }
-    return res.json();
-  },
-
-  async transform({ block, operation, context, provider }) {
-    if (!this.isOnline()) throw new Error("OFFLINE");
-    const res = await fetch("/api/transform", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ block, operation, context, provider })
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || "Transform failed.");
-    }
-    return res.json();
+router.post("/extract/pdf", upload.single("file"), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: "No file uploaded." });
+    const result = await extractPdfPages(req.file.buffer);
+    res.json(result);
+  } catch (err) {
+    console.error("PDF extraction error:", err);
+    res.status(500).json({ error: err.message || "PDF extraction failed." });
   }
-};
+});
 
-window.RubiscoAPI = RubiscoAPI;
+router.post("/generate", async (req, res) => {
+  try {
+    const { pages, mode = "smart", referenceBook, includeSourceRefs, provider } = req.body;
+
+    if (!Array.isArray(pages) || pages.length === 0) {
+      return res.status(400).json({ error: "No source pages/text supplied." });
+    }
+    if (!GENERATION_MODES.includes(mode)) {
+      return res.status(400).json({ error: `Invalid mode "${mode}".` });
+    }
+
+    const { document, qcErrors } = await generateDocument({
+      pages,
+      mode,
+      referenceBook,
+      includeSourceRefs: !!includeSourceRefs,
+      providerOverride: provider
+    });
+
+    res.json({ document, qcErrors });
+  } catch (err) {
+    console.error("Generation error:", err);
+    res.status(500).json({ error: err.message || "Generation failed." });
+  }
+});
+
+router.post("/transform", async (req, res) => {
+  try {
+    const { block, operation, context, provider } = req.body;
+    if (!block || !operation) {
+      return res.status(400).json({ error: "block and operation are required." });
+    }
+    const result = await transformBlock({ block, operation, context, providerOverride: provider });
+    res.json(result);
+  } catch (err) {
+    console.error("Transform error:", err);
+    res.status(500).json({ error: err.message || "Transform failed." });
+  }
+});
+
+router.get("/health", (req, res) => {
+  res.json({
+    ok: true,
+    provider: process.env.AI_PROVIDER || "gemini",
+    modes: GENERATION_MODES
+  });
+});
+
+module.exports = router;
