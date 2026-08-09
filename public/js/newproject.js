@@ -191,7 +191,7 @@ const RubiscoNewProject = (() => {
     const stopCycling = cycleProgressStages();
 
     try {
-      const { document: doc, qcErrors } = await RubiscoAPI.generate({ pages, mode, referenceBook, includeSourceRefs });
+      const { document: doc, qcErrors, chunkErrors, partial } = await RubiscoAPI.generate({ pages, mode, referenceBook, includeSourceRefs });
       stopCycling();
 
       if (qcErrors && qcErrors.length) {
@@ -203,7 +203,16 @@ const RubiscoNewProject = (() => {
         pageInfo: `${pages.length} source item(s)`, document: doc
       };
       await RubiscoDB.saveProject(project);
-      RubiscoToast.show("Notes generated.", "success");
+
+      if (partial && chunkErrors && chunkErrors.length) {
+        console.warn("Some chunks failed to generate and were skipped:", chunkErrors);
+        RubiscoToast.show(
+          `Notes generated, but ${chunkErrors.length} section(s) failed and were skipped. Check console for details.`,
+          "error"
+        );
+      } else {
+        RubiscoToast.show("Notes generated.", "success");
+      }
       RubiscoApp.openProject(project.id);
     } catch (err) {
       stopCycling();
