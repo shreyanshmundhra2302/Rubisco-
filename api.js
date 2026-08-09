@@ -1,85 +1,63 @@
-const express = require("express");
-const multer = require("multer");
-const router = express.Router();
+/**
+ * RUBISCO — API CLIENT
+ * ----------------------------------
+ * Talks to the backend ONLY for:
+ *   - PDF text extraction
+ *   - AI generation
+ *   - AI transform
+ * Never used to store/retrieve personal projects — that's IndexedDB's job.
+ */
 
-const { extractPdfPages } = require("../services/pdf/extract");
-const { generateDocument } = require("../services/ai/generate");
-const { transformBlock } = require("../services/ai/transform");
-const { GENERATION_MODES } = require("../schemas/blockSchema");
+const RubiscoAPI = {
+  isOnline() {
+    return navigator.onLine;
+  },
 
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 40 * 1024 * 1024 } });
+  async health() {
+    const res = await fetch("/api/health");
+    if (!res.ok) throw new Error("Server unreachable.");
+    return res.json();
+  },
 
-// ---------------------------------------------------------
-// POST /api/extract/pdf — upload a PDF, get per-page text + needsOCR flags
-// ---------------------------------------------------------
-router.post("/extract/pdf", upload.single("file"), async (req, res) => {
-  try {
-    if (!req.file) return res.status(400).json({ error: "No file uploaded." });
-    const result = await extractPdfPages(req.file.buffer);
-    res.json(result);
-  } catch (err) {
-    console.error("PDF extraction error:", err);
-    res.status(500).json({ error: err.message || "PDF extraction failed." });
-  }
-});
-
-// ---------------------------------------------------------
-// POST /api/generate — generate a full structured document
-// body: { pages: [{pageNumber, text}], mode, referenceBook, includeSourceRefs, provider }
-// ---------------------------------------------------------
-router.post("/generate", async (req, res) => {
-  try {
-    const { pages, mode = "smart", referenceBook, includeSourceRefs, provider } = req.body;
-
-    if (!Array.isArray(pages) || pages.length === 0) {
-      return res.status(400).json({ error: "No source pages/text supplied." });
+  async extractPdf(file) {
+    if (!this.isOnline()) throw new Error("OFFLINE");
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch("/api/extract/pdf", { method: "POST", body: form });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || "PDF extraction failed.");
     }
-    if (!GENERATION_MODES.includes(mode)) {
-      return res.status(400).json({ error: `Invalid mode "${mode}".` });
-    }
+    return res.json();
+  },
 
-    const { document, qcErrors } = await generateDocument({
-      pages,
-      mode,
-      referenceBook,
-      includeSourceRefs: !!includeSourceRefs,
-      providerOverride: provider
+  async generate({ pages, mode, referenceBook, includeSourceRefs, provider }) {
+    if (!this.isOnline()) throw new Error("OFFLINE");
+    const res = await fetch("/api/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pages, mode, referenceBook, includeSourceRefs, provider })
     });
-
-    res.json({ document, qcErrors });
-  } catch (err) {
-    console.error("Generation error:", err);
-    res.status(500).json({ error: err.message || "Generation failed." });
-  }
-});
-
-// ---------------------------------------------------------
-// POST /api/transform — transform a single selected block
-// body: { block, operation, context, provider }
-// ---------------------------------------------------------
-router.post("/transform", async (req, res) => {
-  try {
-    const { block, operation, context, provider } = req.body;
-    if (!block || !operation) {
-      return res.status(400).json({ error: "block and operation are required." });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || "Generation failed.");
     }
-    const result = await transformBlock({ block, operation, context, providerOverride: provider });
-    res.json(result);
-  } catch (err) {
-    console.error("Transform error:", err);
-    res.status(500).json({ error: err.message || "Transform failed." });
+    return res.json();
+  },
+
+  async transform({ block, operation, context, provider }) {
+    if (!this.isOnline()) throw new Error("OFFLINE");
+    const res = await fetch("/api/transform", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ block, operation, context, provider })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || "Transform failed.");
+    }
+    return res.json();
   }
-});
+};
 
-// ---------------------------------------------------------
-// GET /api/health — simple healthcheck + provider info (no secrets)
-// ---------------------------------------------------------
-router.get("/health", (req, res) => {
-  res.json({
-    ok: true,
-    provider: process.env.AI_PROVIDER || "gemini",
-    modes: GENERATION_MODES
-  });
-});
-
-module.exports = router;
+window.RubiscoAPI = RubiscoAPI;
