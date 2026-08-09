@@ -86,8 +86,13 @@ const RubiscoApp = (() => {
   async function openProject(id) {
     const project = await RubiscoDB.getProject(id);
     if (!project) { RubiscoToast.show("Project not found.", "error"); return; }
-    RubiscoEditor.open(project);
-    showView("editor");
+    try {
+      RubiscoEditor.open(project);
+      showView("editor");
+    } catch (err) {
+      console.error("Failed to open project:", err);
+      RubiscoToast.show(err.message || "Failed to open this project — see console for details.", "error");
+    }
   }
 
   function updateOnlineIndicator() {
