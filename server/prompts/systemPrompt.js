@@ -32,7 +32,7 @@ The output must be suitable for MBBS learning and examination preparation.`;
 const OUTPUT_CONTRACT = `
 OUTPUT FORMAT — CRITICAL:
 
-Respond with ONLY a single valid JSON object. No markdown code fences, no preamble, no explanation text outside the JSON.
+Respond with ONLY a single valid JSON object — nothing else. Your entire response must start with the character "{" and end with the character "}". Do not emit more than one top-level JSON object. Do not use markdown code fences (no \`\`\`json or \`\`\`). Do not add any preamble, explanation, comment, or trailing text outside the JSON, including after the closing brace.
 
 The JSON must match this shape exactly:
 
