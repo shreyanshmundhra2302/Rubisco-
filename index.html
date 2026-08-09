@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>Rubisco — Smart Study Notes</title>
+<link rel="manifest" href="/manifest.json" />
+<meta name="theme-color" content="#0f1115" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Merriweather:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ============ TOP BAR ============ -->
+  <header id="topbar">
+    <div class="brand">
+      <span class="brand-mark">R</span>
+      <span class="brand-name">Rubisco</span>
+    </div>
+    <div id="online-indicator" class="online-indicator online">Online</div>
+  </header>
+
+  <!-- ============ VIEW: DASHBOARD ============ -->
+  <section id="view-dashboard" class="view active">
+    <div class="dashboard-header">
+      <h1>My Projects</h1>
+      <button id="btn-new-project" class="btn btn-primary">+ New Project</button>
+    </div>
+    <div id="project-list" class="project-list"></div>
+    <p id="empty-state" class="empty-state" hidden>No projects yet. Tap "+ New Project" to create your first Smart Study Notes chapter.</p>
+  </section>
+
+  <!-- ============ VIEW: NEW PROJECT ============ -->
+  <section id="view-newproject" class="view">
+    <div class="view-header">
+      <button class="btn btn-ghost" data-nav="dashboard">&larr; Back</button>
+      <h2>New Project</h2>
+    </div>
+
+    <div class="np-step" id="np-step-source">
+      <h3>1. Add Source</h3>
+      <div class="upload-zone" id="upload-zone">
+        <input type="file" id="file-input" accept=".pdf,image/*" multiple hidden />
+        <p>Drag & drop PDF or images here, or tap to choose files</p>
+        <button class="btn btn-secondary" id="btn-choose-file">Choose Files</button>
+      </div>
+      <details class="paste-text-toggle">
+        <summary>Or paste / type text instead</summary>
+        <textarea id="paste-text-area" rows="8" placeholder="Paste or type source text here..."></textarea>
+      </details>
+
+      <div id="page-thumbs" class="page-thumbs"></div>
+    </div>
+
+    <div class="np-step" id="np-step-review" hidden>
+      <h3>2. Review Extracted Text</h3>
+      <div id="ocr-status" class="ocr-status"></div>
+      <div id="extracted-pages"></div>
+    </div>
+
+    <div class="np-step" id="np-step-generate">
+      <h3>3. Generate</h3>
+      <label class="field-label">Mode</label>
+      <select id="mode-select" class="field-select">
+        <option value="smart" selected>Smart Study Notes (default)</option>
+        <option value="summary">Summary</option>
+        <option value="qa">Question &amp; Answer</option>
+        <option value="mnemonics">Mnemonics</option>
+        <option value="flowcharts">Flowcharts</option>
+        <option value="tables">Tables</option>
+        <option value="examRevision">Exam Revision</option>
+        <option value="mcq">MCQs</option>
+        <option value="viva">Viva Questions</option>
+        <option value="clinicalScenario">Clinical Scenario Questions</option>
+        <option value="flashcards">Flashcards</option>
+      </select>
+
+      <label class="field-label">Reference book (optional)</label>
+      <input type="text" id="reference-book-input" class="field-input" placeholder="e.g. Harsh Mohan Pathology" />
+
+      <label class="checkbox-label">
+        <input type="checkbox" id="source-ref-toggle" />
+        Include source page references (e.g. [Source: PDF p. 17])
+      </label>
+
+      <button id="btn-generate" class="btn btn-primary btn-lg" disabled>Generate Smart Study Notes</button>
+
+      <div id="generation-progress" class="generation-progress" hidden>
+        <div class="progress-stage" id="progress-stage-text">Reading source…</div>
+        <div class="progress-bar"><div class="progress-bar-fill" id="progress-bar-fill"></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ VIEW: EDITOR ============ -->
+  <section id="view-editor" class="view">
+    <div class="editor-topbar">
+      <button class="btn btn-ghost" data-nav="dashboard">&larr; Projects</button>
+      <input type="text" id="editor-title-input" class="editor-title-input" />
+      <div class="editor-actions">
+        <button id="btn-undo" class="btn btn-icon" title="Undo">&#8630;</button>
+        <button id="btn-redo" class="btn btn-icon" title="Redo">&#8631;</button>
+        <button id="btn-toggle-panel" class="btn btn-icon" title="Formatting">&#9881;</button>
+        <button id="btn-export" class="btn btn-secondary" title="Export">Export</button>
+      </div>
+    </div>
+
+    <div class="editor-body">
+      <div class="editor-canvas-wrap">
+        <div id="important-topics" class="important-topics"></div>
+        <div id="notes-page" class="notes-page"></div>
+        <button id="btn-add-block" class="btn btn-secondary btn-block-add">+ Add Block</button>
+      </div>
+
+      <aside id="format-panel" class="format-panel" hidden>
+        <h3>Formatting</h3>
+
+        <div class="panel-group">
+          <label>Mode / Transform selected block</label>
+          <select id="transform-op-select" class="field-select">
+            <option value="toBullets">Convert → Bullets</option>
+            <option value="toNumbered">Convert → Numbered List</option>
+            <option value="toQA">Convert → Q&amp;A</option>
+            <option value="toFlowchart">Convert → Flowchart</option>
+            <option value="toTable">Convert → Table</option>
+            <option value="toClassification">Convert → Classification</option>
+            <option value="generateMnemonic">Generate Mnemonic</option>
+            <option value="generateAnalogy">Generate Analogy</option>
+            <option value="generateStory">Generate Short Story</option>
+            <option value="makeHighYield">Make High-Yield</option>
+            <option value="addExamTag">Add Exam Tag</option>
+            <option value="simplify">Simplify</option>
+            <option value="expand">Expand</option>
+            <option value="reorganize">Reorganize</option>
+            <option value="regenerate">Regenerate</option>
+          </select>
+          <button id="btn-apply-transform" class="btn btn-secondary">Apply Transform</button>
+          <p class="hint" id="transform-hint">Select a block first by tapping it.</p>
+        </div>
+
+        <div class="panel-group">
+          <label>Colors</label>
+          <div class="color-row" data-color-key="body"><span>Body</span><input type="color" /></div>
+          <div class="color-row" data-color-key="chapterTitle"><span>Chapter Title</span><input type="color" /></div>
+          <div class="color-row" data-color-key="definitionHeader"><span>Definition Header</span><input type="color" /></div>
+          <div class="color-row" data-color-key="mechanism"><span>Mechanism / Pathway</span><input type="color" /></div>
+          <div class="color-row" data-color-key="subheading"><span>Subheading</span><input type="color" /></div>
+          <div class="color-row" data-color-key="secondaryFlowchart"><span>Secondary Flowchart</span><input type="color" /></div>
+          <div class="color-row" data-color-key="pathogenesis"><span>Pathogenesis</span><input type="color" /></div>
+          <div class="color-row" data-color-key="divider"><span>Divider</span><input type="color" /></div>
+          <button id="btn-reset-colors" class="btn btn-ghost btn-sm">Reset to Default Palette</button>
+        </div>
+
+        <div class="panel-group">
+          <label>Fonts</label>
+          <input type="text" id="font-search-input" class="field-input" placeholder="Search Google Fonts (e.g. Lora)" />
+          <div id="font-search-results" class="font-search-results"></div>
+          <input type="file" id="local-font-input" accept=".ttf,.otf" hidden />
+          <button id="btn-import-local-font" class="btn btn-ghost btn-sm" style="margin-top:6px;">Import local font (.ttf/.otf)</button>
+          <label class="field-label">Body font size (px)</label>
+          <input type="range" id="body-size-range" min="10" max="20" step="1" />
+        </div>
+
+        <div class="panel-group">
+          <label>Layout</label>
+          <label class="checkbox-label"><input type="checkbox" id="two-column-toggle" checked /> Two-column layout</label>
+          <label class="field-label">Column gap (mm)</label>
+          <input type="range" id="column-gap-range" min="4" max="16" step="1" />
+        </div>
+      </aside>
+    </div>
+  </section>
+
+</div>
+
+<div id="toast-container"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+<script src="/js/db.js"></script>
+<script src="/js/api.js"></script>
+<script src="/js/ocr.js"></script>
+<script src="/js/blocks.js"></script>
+<script src="/js/editor.js"></script>
+<script src="/js/newproject.js"></script>
+<script src="/js/export.js"></script>
+<script src="/js/app.js"></script>
+</body>
+</html>
