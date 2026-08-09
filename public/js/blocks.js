@@ -75,12 +75,12 @@ const RubiscoBlocks = {
         return el("p", "editable", escapeHtml(b.content));
       case "bulletList": {
         const ul = el("ul");
-        b.items.forEach(i => ul.appendChild(el("li", "editable", escapeHtml(i))));
+        (b.items || []).forEach(i => ul.appendChild(el("li", "editable", escapeHtml(i))));
         return ul;
       }
       case "numberedList": {
         const ol = el("ol");
-        b.items.forEach(i => ol.appendChild(el("li", "editable", escapeHtml(i))));
+        (b.items || []).forEach(i => ol.appendChild(el("li", "editable", escapeHtml(i))));
         return ol;
       }
       case "definition": {
@@ -117,7 +117,7 @@ const RubiscoBlocks = {
         const tbody = el("tbody");
         (b.rows || []).forEach(row => {
           const tr = el("tr");
-          row.forEach(cell => tr.appendChild(el("td", "editable", escapeHtml(cell))));
+          (row || []).forEach(cell => tr.appendChild(el("td", "editable", escapeHtml(cell))));
           tbody.appendChild(tr);
         });
         table.appendChild(tbody);
